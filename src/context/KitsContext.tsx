@@ -20,11 +20,15 @@ interface Kit {
   createdAt: string;
 }
 
+import { Product } from '../types';
+
 interface KitsContextType {
   kits: Kit[];
   addKit: (kit: Omit<Kit, 'id' | 'createdAt'>) => void;
   updateKit: (id: string, updateData: Partial<Kit>) => void;
   deleteKit: (id: string) => void;
+  canAssembleKit: (kit: Kit, quantity: number, products: Product[]) => boolean;
+  getKitAvailability: (kit: Kit, products: Product[]) => number;
 }
 
 const KitsContext = createContext<KitsContextType | null>(null);
@@ -56,8 +60,29 @@ export function KitsProvider({ children }: { children: ReactNode }) {
     setKits(prev => prev.filter(k => k.id !== id));
   };
 
+  const canAssembleKit = (kit: Kit, quantity: number, products: Product[]): boolean => {
+    return kit.items.every((item: any) => {
+      const product = products.find(p => p.id === item.productId);
+      return product && product.stock >= item.quantity * quantity;
+    });
+  };
+
+  const getKitAvailability = (kit: Kit, products: Product[]): number => {
+    let maxQuantity = Infinity;
+    kit.items.forEach((item: any) => {
+      const product = products.find(p => p.id === item.productId);
+      if (product) {
+        const available = Math.floor(product.stock / item.quantity);
+        maxQuantity = Math.min(maxQuantity, available);
+      } else {
+        maxQuantity = 0;
+      }
+    });
+    return maxQuantity === Infinity ? 0 : maxQuantity;
+  };
+
   return (
-    <KitsContext.Provider value={{ kits, addKit, updateKit, deleteKit }}>
+    <KitsContext.Provider value={{ kits, addKit, updateKit, deleteKit, canAssembleKit, getKitAvailability }}>
       {children}
     </KitsContext.Provider>
   );

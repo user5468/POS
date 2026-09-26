@@ -37,6 +37,8 @@ interface PromotionsContextType {
   addCoupon: (coupon: Omit<Coupon, 'id' | 'createdAt' | 'usedCount'>) => void;
   updateCoupon: (id: string, updateData: Partial<Coupon>) => void;
   deleteCoupon: (id: string) => void;
+  validateCoupon: (code: string, purchaseTotal: number) => { valid: boolean; coupon?: Coupon; message: string };
+  useCoupon: (code: string) => void;
 }
 
 const PromotionsContext = createContext<PromotionsContextType | null>(null);
@@ -95,6 +97,25 @@ export function PromotionsProvider({ children }: { children: ReactNode }) {
     setCoupons(prev => prev.filter(c => c.id !== id));
   };
 
+  const validateCoupon = (code: string, purchaseTotal: number) => {
+    const coupon = coupons.find(c => c.code.toUpperCase() === code.toUpperCase());
+    if (!coupon) return { valid: false, message: 'Cupón no encontrado' };
+    if (!coupon.active) return { valid: false, coupon, message: 'Cupón desactivado' };
+    const now = new Date();
+    if (now < new Date(coupon.startDate)) return { valid: false, coupon, message: 'Cupón aún no disponible' };
+    if (now > new Date(coupon.endDate)) return { valid: false, coupon, message: 'Cupón expirado' };
+    if (coupon.usedCount >= coupon.maxUses) return { valid: false, coupon, message: 'Cupón sin usos disponibles' };
+    if (purchaseTotal < coupon.minPurchase) return { valid: false, coupon, message: `Compra mínima: $${coupon.minPurchase}` };
+    return { valid: true, coupon, message: 'Cupón válido' };
+  };
+
+  const useCoupon = (code: string) => {
+    const coupon = coupons.find(c => c.code.toUpperCase() === code.toUpperCase());
+    if (coupon) {
+      updateCoupon(coupon.id, { usedCount: coupon.usedCount + 1 });
+    }
+  };
+
   return (
     <PromotionsContext.Provider value={{
       promotions,
@@ -105,6 +126,8 @@ export function PromotionsProvider({ children }: { children: ReactNode }) {
       addCoupon,
       updateCoupon,
       deleteCoupon,
+      validateCoupon,
+      useCoupon,
     }}>
       {children}
     </PromotionsContext.Provider>

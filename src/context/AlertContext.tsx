@@ -13,6 +13,7 @@ interface AlertContextType {
   showAlert: (type: AlertType, message: string) => void;
   success: (message: string) => void;
   error: (message: string) => void;
+  showError: (message: string) => void;
   warning: (message: string) => void;
   info: (message: string) => void;
 }
@@ -32,11 +33,12 @@ export function AlertProvider({ children }: { children: ReactNode }) {
 
   const success = (message: string) => showAlert('success', message);
   const error = (message: string) => showAlert('error', message);
+  const showError = (message: string) => showAlert('error', message);
   const warning = (message: string) => showAlert('warning', message);
   const info = (message: string) => showAlert('info', message);
 
   return (
-    <AlertContext.Provider value={{ alerts, showAlert, success, error, warning, info }}>
+    <AlertContext.Provider value={{ alerts, showAlert, success, error, showError, warning, info }}>
       {children}
       <div className="fixed top-4 right-4 z-50 space-y-2">
         {alerts.map(alert => (
