@@ -1,4 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { db } from '../firebase';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query } from 'firebase/firestore';
 
 interface User {
   id: string;
@@ -15,9 +17,9 @@ interface AuthContextType {
   login: (username: string, password: string) => boolean;
   logout: () => void;
   users: User[];
-  addUser: (user: Omit<User, 'id' | 'createdAt'>) => void;
-  updateUser: (id: string, updateData: Partial<User>) => void;
-  deleteUser: (id: string) => void;
+  addUser: (user: Omit<User, 'id' | 'createdAt'>) => Promise<void>;
+  updateUser: (id: string, updateData: Partial<User>) => Promise<void>;
+  deleteUser: (id: string) => Promise<void>;
   loading: boolean;
 }
 
@@ -34,16 +36,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return saved ? JSON.parse(saved) : null;
   });
 
-  const [users, setUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('users');
-    return saved ? JSON.parse(saved) : defaultUsers;
-  });
-
-  const [loading] = useState(false);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    localStorage.setItem('users', JSON.stringify(users));
-  }, [users]);
+    const q = query(collection(db, 'users'));
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      const firebaseUsers: User[] = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as User));
+      
+      if (firebaseUsers.length === 0) {
+        for (const user of defaultUsers) {
+          await addDoc(collection(db, 'users'), user);
+        }
+      } else {
+        setUsers(firebaseUsers);
+      }
+      setLoading(false);
+    }, (error) => {
+      console.error('Error cargando usuarios:', error);
+      const saved = localStorage.getItem('users');
+      setUsers(saved ? JSON.parse(saved) : defaultUsers);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -62,25 +82,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return false;
   };
 
-  const logout = () => {
-    setUser(null);
+  const logout = () => setUser(null);
+
+  const addUser = async (userData: Omit<User, 'id' | 'createdAt'>) => {
+    const newUser = { ...userData, id: Date.now().toString(), createdAt: new Date().toISOString() };
+    try {
+      await addDoc(collection(db, 'users'), newUser);
+    } catch (error) {
+      console.error('Error agregando usuario:', error);
+    }
   };
 
-  const addUser = (userData: Omit<User, 'id' | 'createdAt'>) => {
-    const newUser: User = {
-      ...userData,
-      id: Date.now().toString(),
-      createdAt: new Date().toISOString(),
-    };
-    setUsers(prev => [...prev, newUser]);
+  const updateUser = async (id: string, updateData: Partial<User>) => {
+    try {
+      await updateDoc(doc(db, 'users', id), updateData as any);
+    } catch (error) {
+      console.error('Error actualizando usuario:', error);
+    }
   };
 
-  const updateUser = (id: string, updateData: Partial<User>) => {
-    setUsers(prev => prev.map(u => u.id === id ? { ...u, ...updateData } : u));
-  };
-
-  const deleteUser = (id: string) => {
-    setUsers(prev => prev.filter(u => u.id !== id));
+  const deleteUser = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'users', id));
+    } catch (error) {
+      console.error('Error eliminando usuario:', error);
+    }
   };
 
   return (
